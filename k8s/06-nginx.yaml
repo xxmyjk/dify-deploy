@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-cm
+data:
+  proxy.conf: |
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+  nginx.conf: |
+    user  nginx;
+    worker_processes  auto;
+
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+
+
+    events {
+        worker_connections  1024;
+    }
+
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log  /var/log/nginx/access.log  main;
+
+        sendfile        on;
+        #tcp_nopush     on;
+
+        keepalive_timeout  65;
+
+        #gzip  on;
+        client_max_body_size 15M;
+
+        include /etc/nginx/conf.d/*.conf;
+    }
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+
+        location /console/api {
+          proxy_pass http://api-svc:5001;
+          include proxy.conf;
+        }
+
+        location /api {
+          proxy_pass http://api-svc:5001;
+          include proxy.conf;
+        }
+
+        location /v1 {
+          proxy_pass http://api-svc:5001;
+          include proxy.conf;
+        }
+
+        location /files {
+          proxy_pass http://api-svc:5001;
+          include proxy.conf;
+        }
+
+        location / {
+          proxy_pass http://web-svc:3000;
+          include proxy.conf;
+        }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-svc
+spec:
+  selector:
+    app: nginx
+  ports:
+    - nodePort: 30515
+      port: 80
+      protocol: TCP
+  sessionAffinity: None
+  type: NodePort
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: registry.dev.lingjuninvest.org/dify-deps/nginx:latest
+          resources:
+            limits:
+              memory: 4Gi
+              cpu: 4
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /tmp/
+          command: ["bash", "-c"]
+          args:
+            - |
+              cp /tmp/nginx.conf /etc/nginx/nginx.conf
+              cp /tmp/proxy.conf /etc/nginx/proxy.conf
+              cp /tmp/conf.d/default.conf /etc/nginx/conf.d/default.conf
+              nginx -c /etc/nginx/nginx.conf -p /etc/nginx/ -g 'daemon off;'
+
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: nginx-cm
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+              - key: proxy.conf
+                path: proxy.conf
+              - key: default.conf
+                path: conf.d/default.conf

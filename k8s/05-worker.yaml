@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-cm
+  namespace: dify-deploy
+data:
+  # Startup mode, 'worker' starts the Celery worker for processing the queue.
+  MODE: worker
+
+  # --- All the configurations below are the same as those in the 'api' service. ---
+
+  # The log level for the application. Supported values are `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+  LOG_LEVEL: INFO
+  # A secret key that is used for securely signing the session cookie and encrypting sensitive information on the database. You can generate a strong key using `openssl rand -base64 42`.
+  # same as the API service
+  SECRET_KEY: sk-9f73s3ljTXVcMT3Blb3ljTqtsKiGHXVcMT3BlbkFJLK7U
+  # The configurations of postgres database connection.
+  # It is consistent with the configuration in the 'db' service below.
+  DB_USERNAME: postgres
+  DB_PASSWORD: difyai123456
+  DB_HOST: db-svc
+  DB_PORT: "5432"
+  DB_DATABASE: dify
+  # The configurations of redis cache connection.
+  REDIS_HOST: redis-svc
+  REDIS_PORT: "6379"
+  REDIS_USERNAME: ""
+  REDIS_PASSWORD: difyai123456
+  REDIS_DB: "0"
+  REDIS_USE_SSL: "false"
+  # The configurations of celery broker.
+  CELERY_BROKER_URL: redis://:difyai123456@redis:6379/1
+  # The type of storage to use for storing user files. Supported values are `local` and `s3`, Default: `local`
+  STORAGE_TYPE: local
+  STORAGE_LOCAL_PATH: storage
+  # The type of vector store to use. Supported values are `weaviate`, `qdrant`, `milvus`.
+  VECTOR_STORE: weaviate
+  # The Weaviate endpoint URL. Only available when VECTOR_STORE is `weaviate`.
+  WEAVIATE_ENDPOINT: http://weaviate-svc:8080
+  # The Weaviate API key.
+  WEAVIATE_API_KEY: WVF5YThaHlkYwhGUSmCRgsX3tD5ngdN8pkih
+  # # The Qdrant endpoint URL. Only available when VECTOR_STORE is `qdrant`.
+  # QDRANT_URL: http://qdrant:6333
+  # # The Qdrant API key.
+  # QDRANT_API_KEY: difyai123456
+  # # The Qdrant clinet timeout setting.
+  # QDRANT_CLIENT_TIMEOUT: 20
+  # # Milvus configuration Only available when VECTOR_STORE is `milvus`.
+  # # The milvus host.
+  # MILVUS_HOST: 127.0.0.1
+  # # The milvus host.
+  # MILVUS_PORT: 19530
+  # # The milvus username.
+  # MILVUS_USER: root
+  # # The milvus password.
+  # MILVUS_PASSWORD: Milvus
+  # # The milvus tls switch.
+  # MILVUS_SECURE: "false"
+  # Mail configuration, support: resend
+  MAIL_TYPE: ""
+  # default send from email address, if not specified
+  MAIL_DEFAULT_SEND_FROM: "YOUR EMAIL FROM (eg: no-reply <no-reply@dify.ai>)"
+  # the api-key for resend (https://resend.com)
+  RESEND_API_KEY: ""
+  RESEND_API_URL: https://api.resend.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-svc
+  namespace: dify-deploy
+spec:
+  selector:
+    app: worker
+  ports:
+    - port: 5001
+      targetPort: 5001
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: worker-pvc
+  namespace: dify-deploy
+spec:
+  resources:
+    requests:
+      storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: dify-deploy
+spec:
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: registry.dev.lingjuninvest.org/dify-deps/langgenius/dify-api:0.4.9
+          resources:
+            limits:
+              memory: 80Gi
+              cpu: 20
+              nvidia.com/gpu: 4
+          ports:
+            - containerPort: 5001
+          envFrom:
+            - configMapRef:
+                name: worker-cm
+          volumeMounts:
+            - name: worker-data
+              mountPath: /app/api/storage
+      volumes:
+        - name: worker-data
+          persistentVolumeClaim:
+            claimName: worker-pvc

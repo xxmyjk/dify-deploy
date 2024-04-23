@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-cm
+  namespace: dify-deploy
+data:
+  PGDATA: /var/lib/postgresql/data/pgdata
+  PGUSER: postgres
+  POSTGRES_DB: dify
+  PODTGRES_PASSWORD: difyai123456
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-svc
+  namespace: dify-deploy
+spec:
+  selector:
+    app: db
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-pvc
+spec:
+  resources:
+    requests:
+      storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db
+  namespace: dify-deploy
+spec:
+  selector:
+    matchLabels:
+      app: db
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+        - name: db
+          env:
+            - name: PGDATA
+              valueFrom:
+                configMapKeyRef:
+                  name: db-cm
+                  key: PGDATA
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: db-cm
+                  key: PGUSER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: db-cm
+                  key: POSTGRES_DB
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                configMapKeyRef:
+                  name: db-cm
+                  key: PODTGRES_PASSWORD
+          image: registry.dev.lingjuninvest.org/dify-deps/postgres:15-alpine
+          resources:
+            limits:
+              cpu: 4
+              memory: 4Gi
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+            failureThreshold: 30
+            periodSeconds: 1
+            timeoutSeconds: 3
+          ports:
+            - containerPort: 5432
+              name: db-port
+          volumeMounts:
+            - name: db-pvc
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: db-pvc
+          persistentVolumeClaim:
+            claimName: db-pvc

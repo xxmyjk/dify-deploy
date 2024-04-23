@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weaviate-cm
+  namespace: dify-deploy
+data:
+  QUERY_DEFAULTS_LIMIT: "25"
+  AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "false"
+  PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+  DEFAULT_VECTORIZER_MODULE: "none"
+  CLUSTER_HOSTNAME: "node1"
+  AUTHENTICATION_APIKEY_ENABLED: "true"
+  AUTHENTICATION_APIKEY_ALLOWED_KEYS: "WVF5YThaHlkYwhGUSmCRgsX3tD5ngdN8pkih"
+  AUTHENTICATION_APIKEY_USERS: "hello@dify.ai"
+  AUTHORIZATION_ADMINLIST_ENABLED: "true"
+  AUTHORIZATION_ADMINLIST_USERS: "hello@dify.ai"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weaviate-svc
+  namespace: dify-deploy
+spec:
+  selector:
+    app: weaviate
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: weaviate-pvc
+  namespace: dify-deploy
+spec:
+  resources:
+    requests:
+      storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weaviate
+  namespace: dify-deploy
+spec:
+  selector:
+    matchLabels:
+      app: weaviate
+  template:
+    metadata:
+      labels:
+        app: weaviate
+    spec:
+      containers:
+        - name: weaviate
+          image: registry.dev.lingjuninvest.org/dify-deps/semitechnologies/weaviate:1.19.0
+          resources:
+            limits:
+              memory: 4Gi
+              cpu: 4
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: weaviate-cm
+          volumeMounts:
+            - name: weaviate-data
+              mountPath: /var/lib/weaviate
+      volumes:
+        - name: weaviate-data
+          persistentVolumeClaim:
+            claimName: weaviate-pvc
+---
+

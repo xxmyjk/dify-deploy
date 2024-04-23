@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-cm
+  namespace: dify-deploy
+data:
+  EDITION: SELF_HOSTED
+  # The base URL of console application api server, refers to the Console base URL of WEB service if console domain is
+  # different from api or web app domain.
+  # example: http://cloud.dify.ai
+  CONSOLE_API_URL: ""
+  # The URL for Web APP api server, refers to the Web App base URL of WEB service if web app domain is different from
+  # console or api domain.
+  # example: http://udify.app
+  APP_API_URL: ""
+  # The DSN for Sentry error reporting. If not set, Sentry error reporting will be disabled.
+  SENTRY_DSN: ""
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc
+  namespace: dify-deploy
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: dify-deploy
+spec:
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: registry.dev.lingjuninvest.org/dify-deps/langgenius/dify-web:0.4.9
+          resources:
+            limits:
+              memory: 4Gi
+              cpu: 4
+          envFrom:
+            - configMapRef:
+                name: web-cm
+          ports:
+            - containerPort: 3000
